@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>野球選手 好きな顔9選メーカー</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; background: #fdf2f2; color: #333; }
+        h1 { color: #d9534f; text-align: center; font-size: 1.4rem; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        textarea { width: 100%; height: 140px; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; }
+        button { background: #d9534f; color: white; border: none; padding: 12px 20px; font-size: 1rem; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 10px; font-weight: bold; }
+        button:hover { background: #c9302c; }
+        .hidden { display: none; }
+        .checkbox-group { display: flex; flex-direction: column; gap: 8px; max-height: 250px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 6px; margin-bottom: 15px; }
+        label { font-size: 1.05rem; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+        input[type="checkbox"], input[type="radio"] { transform: scale(1.2); }
+        .vs-container { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
+        .vs-card { background: #f9f9f9; padding: 12px; border: 2px solid #ddd; border-radius: 8px; text-align: center; font-size: 1.1rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .vs-card:hover { background: #ffe6e6; border-color: #d9534f; }
+        .grid-9 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
+        .grid-item { background: #fff0f0; border: 2px dashed #d9534f; padding: 15px 5px; text-align: center; border-radius: 8px; font-weight: bold; font-size: 0.95rem; }
+        .step-desc { font-size: 0.9rem; color: #666; margin-bottom: 15px; line-height: 1.4; }
+    </style>
+</head>
+<body>
+
+    <h1>⚾ 野球選手 好きな顔9選メーカー</h1>
+
+    <!-- 1. 選手登録・セーブ画面 -->
+    <div id="screen-setup" class="card">
+        <h3>1. 選手を登録しよう（1行に1人）</h3>
+        <p class="step-desc">一度登録すれば、このスマホやPCに自動セーブされます！次からはそのまま遊べます。</p>
+        <textarea id="player-input" placeholder="例：&#10;選手A&#10;選手B&#10;選手C&#10;選手D&#10;選手E&#10;選手F&#10;選手G&#10;選手H&#10;選手I&#10;選手J"></textarea>
+        <button onclick="saveAndStart()">選手をセーブしてスタート！</button>
+    </div>
+
+    <!-- 2. 1次ラウンド画面 -->
+    <div id="screen-round1" class="card hidden">
+        <h3 id="r1-title">【1次ラウンド】予選グループ投票</h3>
+        <p class="step-desc">登録された選手から、少しでも気になる・好きな選手を好きなだけチェックしてね！（多めに選んでもOK！）</p>
+        <div id="r1-list" class="checkbox-group"></div>
+        <button onclick="processRound1()">2次ラウンドへ進む ➔</button>
+    </div>
+
+    <!-- 3. 2次・3次ラウンド画面（グループ比較） -->
+    <div id="screen-rounds" class="card hidden">
+        <h3 id="rounds-title">【ラウンド進行中】</h3>
+        <p id="rounds-desc" class="step-desc"></p>
+        <div id="rounds-content" class="vs-container"></div>
+        <button id="rounds-next-btn" onclick="nextMatch()" class="hidden">次の試合へ ➔</button>
+    </div>
+
+    <!-- 4. 最終ラウンド（ベスト9発表） -->
+    <div id="screen-final" class="card hidden">
+        <h3>🏆 あなたの「好きな顔ベスト9」完成！</h3>
+        <p class="step-desc">おめでとうございます！比較を繰り返して厳選された9人です。</p>
+        <div id="final-grid" class="grid-9"></div>
+        <button onclick="location.reload()" style="background:#666; margin-top:20px;">最初からやり直す</button>
+    </div>
+
+    <script>
+        let allPlayers = [];
+        let pool = []; // 現在のサバイバル選手
+        let currentRoundStep = 2; // 2 or 3
+        let matches = [];
+        let currentMatchIdx = 0;
+        let winners = [];
+
+        // 起動時にセーブデータを読み込む
+        window.onload = function() {
+            const saved = localStorage.getItem('baseball_players_v1');
+            if (saved) {
+                document.getElementById('player-input').value = saved;
+            }
+        };
+
+        function saveAndStart() {
+            const val = document.getElementById('player-input').value.trim();
+            if (!val) {
+                alert('選手を登録してください！');
+                return;
+            }
+            localStorage.setItem('baseball_players_v1', val);
+            allPlayers = val.split('\n').map(p => p.trim()).filter(p => p !== '');
+            
+            if (allPlayers.length < 9) {
+                alert('ベスト9を選ぶため、9人以上の選手を登録してください！（現在 ' + allPlayers.length + '人）');
+                return;
+            }
+
+            startRound1();
+        }
+
+        // 1次ラウンド開始
+        function startRound1() {
+            document.getElementById('screen-setup').classList.add('hidden');
+            document.getElementById('screen-round1').classList.remove('hidden');
+
+            let html = '';
+            // シャッフルして表示
+            let shuffled = [...allPlayers].sort(() => Math.random() - 0.5);
+            shuffled.forEach(p => {
+                html += `<label><input type="checkbox" name="r1-chk" value="${p}" checked> ${p}</label>`;
+            });
+            document.getElementById('r1-list').innerHTML = html;
+        }
+
+        // 1次ラウンド終了 → 2次ラウンドへ
+        function processRound1() {
+            const checked = document.querySelectorAll('input[name="r1-chk"]:checked');
+            pool = Array.from(checked).map(el => el.value);
+
+            if (pool.length < 9) {
+                alert('ベスト9を選ぶため、1次ラウンドで少なくとも9人以上チェックしてください！（現在 ' + pool.length + '人）');
+                return;
+            }
+
+            currentRoundStep = 2;
+            startGroupComparison();
+        }
+
+        // 2次・3次ラウンド（グループ比較）のセットアップ
+        function startGroupComparison() {
+            document.getElementById('screen-round1').classList.add('hidden');
+            document.getElementById('screen-rounds').classList.remove('hidden');
+
+            if (currentRoundStep === 2) {
+                document.getElementById('rounds-title').innerText = "【2次ラウンド】グループ比較戦";
+                document.getElementById('rounds-desc').innerText = `残った ${pool.length} 人の選手をシャッフルし、3〜4人のグループに分けて「この中で一番好き！」な選手を選んでもらいます。（何回か繰り返します）`;
+            } else {
+                document.getElementById('rounds-title').innerText = "【3次ラウンド】タイマン＆クロス比較戦";
+                document.getElementById('rounds-desc').innerText = `さらに絞り込まれた精鋭たちを、違う組み合わせの1対1（タイマン）で何度も比較させます！`;
+            }
+
+            // グループ（マッチ）を作成
+            pool.sort(() => Math.random() - 0.5);
+            matches = [];
+            let groupSize = currentRoundStep === 2 ? 3 : 2; // 2次は3人グループ、3次は2人(タイマン)
+
+            for (let i = 0; i < pool.length; i += groupSize) {
+                let group = pool.slice(i, i + groupSize);
+                if (group.length > 1) {
+                    matches.push(group);
+                }
+            }
+
+            currentMatchIdx = 0;
+            winners = [];
+            showCurrentMatch();
+        }
+
+        // 現在の対戦・グループを表示
+        function showCurrentMatch() {
+            if (currentMatchIdx >= matches.length) {
+                // ラウンド終了：勝者たちを次のプールにする
+                pool = [...new Set(winners)];
+                
+                // 9人以下になったら最終ラウンドへ、まだ多ければラウンド継続
+                if (pool.length <= 9) {
+                    showFinalScreen();
+                } else {
+                    if (currentRoundStep === 2 && pool.length <= 12) {
+                        currentRoundStep = 3; // 3次ラウンドへ移行
+                    }
+                    startGroupComparison();
+                }
+                return;
+            }
+
+            let group = matches[currentMatchIdx];
+            let titleText = currentRoundStep === 2 ? `第 ${currentMatchIdx + 1} グループ (3人の中から1人選ぶ)` : `第 ${currentMatchIdx + 1} 試合 (タイマン勝負)`;
+            
+            document.getElementById('rounds-title').innerText = currentRoundStep === 2 ? "【2次ラウンド】グループ比較戦" : "【3次ラウンド】タイマン比較戦";
+            document.getElementById('rounds-desc').innerText = `${titleText}  (残り候補: ${pool.length}人)`;
+
+            let html = '';
+            group.forEach(player => {
+                html += `<div class="vs-card" onclick="selectWinner('${player}')">✨ ${player}</div>`;
+            });
+            
+            document.getElementById('rounds-content').innerHTML = html;
+            document.getElementById('rounds-next-btn').classList.add('hidden');
+        }
+
+        // 勝者を選んだ時
+        function selectWinner(chosenPlayer) {
+            winners.push(chosenPlayer);
+            // 負けたメンバーも復活のチャンスを残すため、少し混ぜるかそのまま進む
+            currentMatchIdx++;
+            showCurrentMatch();
+        }
+
+        // 最終画面
+        function showFinalScreen() {
+            document.getElementById('screen-rounds').classList.add('hidden');
+            document.getElementById('screen-final').classList.remove('hidden');
+
+            // ちょうど9人になるように調整、または上位9人を表示
+            let finalNine = pool.slice(0, 9);
+            while(finalNine.length < 9) {
+                finalNine.push("枠");
+            }
+
+            let html = '';
+            finalNine.forEach((p, idx) => {
+                html += `<div class="grid-item">${idx + 1}位<br>${p}</div>`;
+            });
+            document.getElementById('final-grid').innerHTML = html;
+        }
+    </script>
+</body>
+</html>
